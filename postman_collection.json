@@ -1,0 +1,167 @@
+{
+  "info": {
+    "name": "WhatsApp Bridge",
+    "description": "Postman collection for the WhatsApp Bridge API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "description": "Quick health check.",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "List Sessions",
+      "description": "Shows active sessions held in memory.",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/sessions"
+      }
+    },
+    {
+      "name": "Get Session",
+      "description": "Shows status for one session.",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/sessions/{{sessionId}}"
+      }
+    },
+    {
+      "name": "Connect Session",
+      "description": "Start a session with QR mode and save its webhook URL.",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"mode\":\"qr\",\"waitMs\":15000,\"webhookUrl\":\"{{webhookUrl}}\",\"webhookSecret\":\"{{webhookSecret}}\",\"reset\":true}"
+        },
+        "url": "{{baseUrl}}/sessions/{{sessionId}}/connect"
+      }
+    },
+    {
+      "name": "Connect Session (Pair)",
+      "description": "Start a session with pairing code and save its webhook URL.",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"mode\":\"pair\",\"phoneNumber\":\"201234567890\",\"webhookUrl\":\"{{webhookUrl}}\",\"webhookSecret\":\"{{webhookSecret}}\",\"reset\":true}"
+        },
+        "url": "{{baseUrl}}/sessions/{{sessionId}}/connect"
+      }
+    },
+    {
+      "name": "Send Message",
+      "description": "Send a plain text message from the session.",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"to\":\"201234567890\",\"message\":\"Hello from Laravel\"}"
+        },
+        "url": "{{baseUrl}}/sessions/{{sessionId}}/send"
+      }
+    },
+    {
+      "name": "Send Poll",
+      "description": "Send a poll message from the session.",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"to\":\"201234567890\",\"name\":\"Pick a delivery slot\",\"options\":[\"10am\",\"2pm\",\"6pm\"],\"selectableCount\":1}"
+        },
+        "url": "{{baseUrl}}/sessions/{{sessionId}}/send-poll"
+      }
+    },
+    {
+      "name": "Send Buttons",
+      "description": "Send a buttons message from the session.",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"201234567890\",\n  \"title\": \"Header Title\",\n  \"text\": \"Choose one of the options below\",\n  \"footer\": \"Footer text\",\n  \"buttons\": [\n    {\n      \"id\": \"quick_1\",\n      \"text\": \"Quick reply\"\n    },\n    {\n      \"name\": \"cta_url\",\n      \"buttonParamsJson\": {\n        \"display_text\": \"Open Website\",\n        \"url\": \"https://example.com\"\n      }\n    }\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/sessions/{{sessionId}}/send-buttons"
+      }
+    },
+    {
+      "name": "Send Interactive",
+      "description": "Send a native interactive message (advanced buttons).",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"201234567890\",\n  \"text\": \"Pick one\",\n  \"footer\": \"Footer text\",\n  \"interactiveButtons\": [\n    {\n      \"name\": \"quick_reply\",\n      \"buttonParamsJson\": {\n        \"display_text\": \"Yes\",\n        \"id\": \"yes\"\n      }\n    },\n    {\n      \"name\": \"cta_url\",\n      \"buttonParamsJson\": {\n        \"display_text\": \"Open website\",\n        \"url\": \"https://example.com\"\n      }\n    }\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/sessions/{{sessionId}}/send-interactive"
+      }
+    },
+    {
+      "name": "Logout Session",
+      "description": "Logout the session and remove it from memory.",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/sessions/{{sessionId}}"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "sessionId",
+      "value": "demo"
+    },
+    {
+      "key": "webhookUrl",
+      "value": "http://localhost:8000/webhooks/whatsapp"
+    },
+    {
+      "key": "webhookSecret",
+      "value": ""
+    }
+  ]
+}
