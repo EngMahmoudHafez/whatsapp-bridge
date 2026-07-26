@@ -41,7 +41,10 @@ export async function postWebhook(session, payload, eventId, logger) {
       timeout: 10000
     });
   } catch (error) {
-    logger.error({ error }, 'webhook request failed');
+    logger.error(
+      { err: error, sessionId: session.id },
+      'webhook request failed'
+    );
   }
 }
 

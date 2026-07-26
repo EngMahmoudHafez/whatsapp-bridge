@@ -5,10 +5,7 @@ import { recordPollCreation } from '../utils/pollUtils.js';
 import { normalizeInteractiveContent } from '../utils/messageUtils.js';
 import { hydratedTemplate, InteractiveValidationError, sendButtons as sendButtonsHelper } from 'baileys_helpers';
 import { jidNormalizedUser } from '@whiskeysockets/baileys/lib/WABinary/jid-utils.js';
-import pino from 'pino';
-import { config } from '../config/index.js';
-
-const logger = pino({ level: config.LOG_LEVEL });
+import { logger } from '../logger.js';
 
 export async function sendMessage(req, res, next) {
   try {

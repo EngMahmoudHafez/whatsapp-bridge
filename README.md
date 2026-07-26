@@ -8,19 +8,29 @@ maps to one WhatsApp login and forwards events to a webhook you control.
 ```bash
 yarn install
 cp .env.example .env
+# Set AUTH_PASSWORD in .env before starting the service.
 yarn start
 ```
 
+Open `http://localhost:3000/` to use the dashboard. The dashboard and all
+management API routes require the username and password configured through
+`AUTH_USERNAME` and `AUTH_PASSWORD`.
+
+Application logs are written to stdout and to `LOG_FILE` (defaults to
+`./logs/app.log`). Authenticated users can also inspect the latest entries from
+the **سجل المشاكل** tab in the dashboard.
+
 ## API
 
-- `POST /sessions/:id/connect`
-- `POST /sessions/:id/send`
-- `POST /sessions/:id/send-poll`
-- `POST /sessions/:id/send-buttons`
-- `POST /sessions/:id/send-interactive`
-- `GET /sessions`
-- `GET /sessions/:id`
-- `DELETE /sessions/:id`
+- `POST /api/sessions/:id/connect`
+- `POST /api/sessions/:id/send`
+- `POST /api/sessions/:id/send-poll`
+- `POST /api/sessions/:id/send-buttons`
+- `POST /api/sessions/:id/send-interactive`
+- `GET /api/sessions`
+- `GET /api/sessions/:id`
+- `DELETE /api/sessions/:id`
+- `GET /api/logs`
 - `GET /health`
 
 ### Connect (QR or Pair)

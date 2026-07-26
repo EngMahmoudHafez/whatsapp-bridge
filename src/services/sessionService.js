@@ -14,14 +14,7 @@ import {
   updateMessageWithPollUpdate
 } from '@whiskeysockets/baileys/lib/Utils/messages.js';
 import { getKeyAuthor } from '@whiskeysockets/baileys/lib/Utils/generics.js';
-import { hydratedTemplate, InteractiveValidationError, sendButtons } from 'baileys_helpers';
 import { config } from '../config/index.js';
-
-// Export logger for use in this file
-let logger;
-export function setLogger(loggerInstance) {
-  logger = loggerInstance;
-}
 import { parseWebhookUrl } from '../utils/validation.js';
 import { getConnectedIdentity } from '../utils/jidUtils.js';
 import { getMessageFromStore, cacheMessage } from '../utils/messageStore.js';
@@ -29,7 +22,6 @@ import { getPollCreation, getPrimaryMessageType, getMessageText, extractButtonRe
 import { pollKeyFromMessageKey, recordPollCreation } from '../utils/pollUtils.js';
 import { emitWebhookEvent } from './webhookService.js';
 
-// Global session storage
 export const sessions = new Map();
 export const sessionLocks = new Map();
 
@@ -42,7 +34,7 @@ async function removeSessionFiles(sessionId, logger) {
   try {
     await fs.rm(sessionPath, { recursive: true, force: true });
   } catch (error) {
-    if (logger) logger.warn({ error, sessionId }, 'could not remove session files');
+    logger.warn({ err: error, sessionId }, 'could not remove session files');
   }
 }
 
@@ -52,7 +44,7 @@ export async function cleanupSession(sessionId, deleteFiles = false, logger) {
     try {
       await existing.sock.logout();
     } catch (error) {
-      logger.warn({ error, sessionId }, 'logout failed during cleanup');
+      logger.warn({ err: error, sessionId }, 'logout failed during cleanup');
     }
     sessions.delete(sessionId);
   }
@@ -73,7 +65,7 @@ async function loadSessionConfig(authPath, logger) {
       try {
         url = parseWebhookUrl(webhook.url);
       } catch (error) {
-        logger.warn({ error, authPath }, 'session config has invalid webhook url');
+        logger.warn({ err: error, authPath }, 'session config has invalid webhook url');
         return { webhook: null };
       }
       return {
@@ -86,7 +78,7 @@ async function loadSessionConfig(authPath, logger) {
     return { webhook: null };
   } catch (error) {
     if (error?.code !== 'ENOENT') {
-      logger.warn({ error, authPath }, 'could not load session config');
+      logger.warn({ err: error, authPath }, 'could not load session config');
     }
     return { webhook: null };
   }
@@ -98,7 +90,7 @@ export async function saveSessionConfig(authPath, sessionConfig, logger) {
     const configPath = path.join(authPath, config.SESSION_CONFIG_FILE);
     await fs.writeFile(configPath, JSON.stringify(sessionConfig, null, 2));
   } catch (error) {
-    logger.error({ error, authPath }, 'failed to save session config');
+    logger.error({ err: error, authPath }, 'failed to save session config');
     throw error;
   }
 }
@@ -107,12 +99,13 @@ async function getLatestVersionSafe(logger) {
   try {
     return await fetchLatestBaileysVersion();
   } catch (error) {
-    logger.warn({ error }, 'could not fetch Baileys version');
+    logger.warn({ err: error }, 'could not fetch Baileys version');
     return { version: undefined, isLatest: false };
   }
 }
 
 export async function createSession(sessionId, logger) {
+  logger.info({ sessionId }, 'creating whatsapp session');
   const authPath = path.join(config.SESSION_DIR, sessionId);
   await ensureDir(authPath);
 
@@ -120,10 +113,11 @@ export async function createSession(sessionId, logger) {
   const sessionConfig = await loadSessionConfig(authPath, logger);
   const { version } = await getLatestVersionSafe(logger);
   const messageStore = new Map();
+  const baileysLogger = logger.child({ component: 'baileys' }, { level: 'warn' });
 
   const sock = makeWASocket({
     version,
-    logger,
+    logger: baileysLogger,
     printQRInTerminal: false,
     browser: ['Windows', 'Chrome', '10.0'],
     auth: state,
@@ -147,6 +141,7 @@ export async function createSession(sessionId, logger) {
   };
 
   sessions.set(sessionId, session);
+  logger.info({ sessionId, authPath }, 'whatsapp session added');
 
   sock.ev.on('creds.update', saveCreds);
 
@@ -160,7 +155,7 @@ export async function createSession(sessionId, logger) {
         logger.info({ sessionId }, 'qr updated');
         qrcodeTerminal.generate(qr, { small: true });
       } catch (error) {
-        logger.error({ error, sessionId }, 'failed to generate QR code');
+        logger.error({ err: error, sessionId }, 'failed to generate QR code');
       }
     }
 
@@ -181,7 +176,7 @@ export async function createSession(sessionId, logger) {
         sessions.delete(sessionId);
         setTimeout(() => {
           getOrCreateSession(sessionId, logger).catch((error) => {
-            logger.error({ error, sessionId }, 'reconnect failed');
+            logger.error({ err: error, sessionId }, 'reconnect failed');
           });
         }, 1000);
       } else {
@@ -422,11 +417,11 @@ export async function restoreSessions(logger) {
       try {
         await getOrCreateSession(sessionId, logger);
       } catch (error) {
-        logger.error({ error, sessionId }, 'could not restore session');
+        logger.error({ err: error, sessionId }, 'could not restore session');
       }
     }
   } catch (error) {
-    logger.warn({ error }, 'could not scan session directory');
+    logger.warn({ err: error }, 'could not scan session directory');
   }
 }
 

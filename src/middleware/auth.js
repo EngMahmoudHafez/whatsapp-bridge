@@ -1,53 +1,53 @@
+import crypto from 'crypto';
 import { config } from '../config/index.js';
 
-// Simple in-memory session store
-const sessions = new Map();
+const dashboardSessions = new Map();
 
 export function createSession(userId) {
-  const sessionId = Math.random().toString(36).substring(7) + Date.now().toString(36);
-  sessions.set(sessionId, {
+  const sessionId = crypto.randomBytes(32).toString('base64url');
+  dashboardSessions.set(sessionId, {
     userId,
-    createdAt: Date.now()
+    expiresAt: Date.now() + config.AUTH_SESSION_TTL_MS
   });
   return sessionId;
 }
 
 export function getSession(sessionId) {
-  return sessions.get(sessionId);
+  const dashboardSession = dashboardSessions.get(sessionId);
+  if (!dashboardSession) return null;
+  if (dashboardSession.expiresAt <= Date.now()) {
+    dashboardSessions.delete(sessionId);
+    return null;
+  }
+  return dashboardSession;
 }
 
 export function deleteSession(sessionId) {
-  sessions.delete(sessionId);
+  dashboardSessions.delete(sessionId);
 }
 
 export function authenticate(username, password) {
-  return username === config.AUTH_USERNAME && password === config.AUTH_PASSWORD;
+  const suppliedCredentials = Buffer.from(`${username}\0${password}`);
+  const expectedCredentials = Buffer.from(
+    `${config.AUTH_USERNAME}\0${config.AUTH_PASSWORD}`
+  );
+  if (suppliedCredentials.length !== expectedCredentials.length) return false;
+  return crypto.timingSafeEqual(suppliedCredentials, expectedCredentials);
 }
 
 export function authMiddleware(req, res, next) {
-  // Allow access to login page, health check, and API login endpoint
-  if (req.path === '/login.html' || req.path === '/health' || req.path === '/api/auth/login' || req.path.startsWith('/api/auth/')) {
-    return next();
-  }
+  const sessionId = req.cookies?.[config.AUTH_COOKIE_NAME];
+  const dashboardSession = sessionId ? getSession(sessionId) : null;
+  if (!dashboardSession) return rejectUnauthorizedRequest(req, res);
 
-  // Check for session cookie
-  const sessionId = req.cookies?.sessionId;
-  if (!sessionId) {
-    if (req.path.startsWith('/api/')) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    return res.redirect('/login.html');
-  }
-
-  const session = getSession(sessionId);
-  if (!session) {
-    if (req.path.startsWith('/api/')) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    return res.redirect('/login.html');
-  }
-
-  req.user = session;
+  req.user = dashboardSession;
   next();
+}
+
+function rejectUnauthorizedRequest(req, res) {
+  if (req.originalUrl.startsWith('/api/')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  return res.redirect('/login.html');
 }
 

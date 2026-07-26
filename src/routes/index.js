@@ -3,6 +3,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import * as authController from '../controllers/authController.js';
 import * as sessionController from '../controllers/sessionController.js';
 import * as messageController from '../controllers/messageController.js';
+import * as logController from '../controllers/logController.js';
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.get('/sessions/:id', authMiddleware, sessionController.getSession);
 router.post('/sessions/:id/connect', authMiddleware, sessionController.connectSession);
 router.get('/sessions/:id/qr', authMiddleware, sessionController.getSessionQr);
 router.delete('/sessions/:id', authMiddleware, sessionController.deleteSession);
+router.get('/logs', authMiddleware, logController.listLogs);
 
 // Message routes (require auth)
 router.post('/sessions/:id/send', authMiddleware, messageController.sendMessage);

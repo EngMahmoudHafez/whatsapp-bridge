@@ -249,6 +249,7 @@
 
         .tabs {
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
             margin-bottom: 20px;
             border-bottom: 2px solid #e9ecef;
@@ -278,6 +279,20 @@
         .tab-content.active {
             display: block;
         }
+
+        .logs-output {
+            background: #111827;
+            color: #e5e7eb;
+            direction: ltr;
+            font-family: Consolas, Monaco, monospace;
+            line-height: 1.5;
+            max-height: 600px;
+            overflow: auto;
+            padding: 20px;
+            text-align: left;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     </style>
 </head>
 
@@ -295,12 +310,13 @@
 
         <div class="content">
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('sessions')">الجلسات</button>
-                <button class="tab" onclick="switchTab('connect')">اتصال جديد</button>
-                <button class="tab" onclick="switchTab('send')">إرسال رسالة</button>
-                <button class="tab" onclick="switchTab('poll')">إرسال استطلاع</button>
-                <button class="tab" onclick="switchTab('buttons')">إرسال أزرار</button>
-                <button class="tab" onclick="switchTab('interactive')">رسالة تفاعلية</button>
+                <button class="tab active" onclick="switchTab('sessions', this)">الجلسات</button>
+                <button class="tab" onclick="switchTab('connect', this)">اتصال جديد</button>
+                <button class="tab" onclick="switchTab('send', this)">إرسال رسالة</button>
+                <button class="tab" onclick="switchTab('poll', this)">إرسال استطلاع</button>
+                <button class="tab" onclick="switchTab('buttons', this)">إرسال أزرار</button>
+                <button class="tab" onclick="switchTab('interactive', this)">رسالة تفاعلية</button>
+                <button class="tab" onclick="switchTab('logs', this)">سجل المشاكل</button>
             </div>
 
             <!-- Sessions Tab -->
@@ -353,7 +369,7 @@
                         </label>
                     </div>
 
-                    <button class="btn btn-primary" onclick="connectSession()">🔗 الاتصال</button>
+                    <button class="btn btn-primary" onclick="connectSession(this)">🔗 الاتصال</button>
 
                     <div id="qr-container" class="qr-container hidden">
                         <h3>QR Code للاتصال:</h3>
@@ -390,7 +406,7 @@
                         <textarea id="message-text" rows="5" placeholder="اكتب رسالتك هنا..."></textarea>
                     </div>
 
-                    <button class="btn btn-primary" onclick="sendMessage()">📤 إرسال</button>
+                    <button class="btn btn-primary" onclick="sendMessage(this)">📤 إرسال</button>
                 </div>
             </div>
 
@@ -426,7 +442,7 @@
                         <input type="number" id="poll-selectable" value="1" min="1">
                     </div>
 
-                    <button class="btn btn-primary" onclick="sendPoll()">📊 إرسال استطلاع</button>
+                    <button class="btn btn-primary" onclick="sendPoll(this)">📊 إرسال استطلاع</button>
                 </div>
             </div>
 
@@ -461,7 +477,7 @@
                         <input type="text" id="buttons-footer" placeholder="Footer text">
                     </div>
 
-                    <button class="btn btn-primary" onclick="sendButtons()">🔘 إرسال أزرار</button>
+                    <button class="btn btn-primary" onclick="sendButtons(this)">🔘 إرسال أزرار</button>
                 </div>
             </div>
 
@@ -513,7 +529,17 @@
                         <input type="text" id="interactive-cta-text" placeholder="فتح الموقع">
                     </div>
 
-                    <button class="btn btn-primary" onclick="sendInteractive()">🎯 إرسال رسالة تفاعلية</button>
+                    <button class="btn btn-primary" onclick="sendInteractive(this)">🎯 إرسال رسالة تفاعلية</button>
+                </div>
+            </div>
+
+            <div id="logs-tab" class="tab-content">
+                <div class="section">
+                    <h2>سجل المشاكل</h2>
+                    <button class="btn btn-primary" onclick="loadLogs()">🔄 تحديث السجل</button>
+                    <p>ملف السجل: <code id="log-file-path">-</code></p>
+                    <div id="logs-alert"></div>
+                    <pre id="logs-output" class="logs-output">جاري تحميل السجل...</pre>
                 </div>
             </div>
         </div>
@@ -522,8 +548,7 @@
     <script>
         const API_BASE = window.location.origin + '/api';
 
-        function switchTab(tabName) {
-            // Hide all tabs
+        function switchTab(tabName, selectedTab) {
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
             });
@@ -531,9 +556,9 @@
                 tab.classList.remove('active');
             });
 
-            // Show selected tab
             document.getElementById(`${tabName}-tab`).classList.add('active');
-            event.target.classList.add('active');
+            selectedTab.classList.add('active');
+            if (tabName === 'logs') loadLogs();
         }
 
         function togglePhoneNumber() {
@@ -548,10 +573,13 @@
 
         function showAlert(containerId, message, type = 'info') {
             const container = document.getElementById(containerId);
-            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            const alertBox = document.createElement('div');
+            alertBox.className = `alert alert-${type}`;
+            alertBox.textContent = message;
+            container.replaceChildren(alertBox);
             setTimeout(() => {
-                container.innerHTML = '';
-            }, 5000);
+                alertBox.remove();
+            }, type === 'error' ? 15000 : 5000);
         }
 
         async function loadSessions() {
@@ -559,11 +587,11 @@
                 const response = await fetch(`${API_BASE}/sessions`, {
                     credentials: 'include'
                 });
-                const data = await response.json();
+                const sessionsResponse = await response.json();
                 const container = document.getElementById('sessions-list');
 
-                if (data.sessions && data.sessions.length > 0) {
-                    container.innerHTML = data.sessions.map(session => `
+                if (sessionsResponse.sessions && sessionsResponse.sessions.length > 0) {
+                    container.innerHTML = sessionsResponse.sessions.map(session => `
                         <div class="session-card">
                             <h3>${session.id}</h3>
                             <p><strong>الحالة:</strong> 
@@ -606,91 +634,112 @@
                     showAlert('sessions-list', 'تم حذف الجلسة بنجاح', 'success');
                     loadSessions();
                 } else {
-                    const error = await response.json();
-                    showAlert('sessions-list', `خطأ: ${error.error}`, 'error');
+                    const errorResponse = await response.json();
+                    showAlert('sessions-list', `خطأ: ${errorResponse.error}`, 'error');
                 }
             } catch (error) {
                 showAlert('sessions-list', `خطأ: ${error.message}`, 'error');
             }
         }
 
-        async function connectSession() {
-            const sessionId = document.getElementById('session-id').value;
-            const mode = document.getElementById('connection-mode').value;
-            const phoneNumber = document.getElementById('phone-number').value;
-            const webhookUrl = document.getElementById('webhook-url').value;
-            const webhookSecret = document.getElementById('webhook-secret').value;
-            const reset = document.getElementById('reset-session').checked;
+        function connectionFormInput() {
+            return {
+                sessionId: document.getElementById('session-id').value,
+                mode: document.getElementById('connection-mode').value,
+                phoneNumber: document.getElementById('phone-number').value,
+                webhookUrl: document.getElementById('webhook-url').value,
+                webhookSecret: document.getElementById('webhook-secret').value,
+                reset: document.getElementById('reset-session').checked
+            };
+        }
 
-            if (!sessionId || !webhookUrl) {
-                showAlert('connect-alert', 'يرجى إدخال معرف الجلسة و Webhook URL', 'error');
-                return;
+        function validateConnectionInput(connectionInput) {
+            if (!connectionInput.sessionId || !connectionInput.webhookUrl) {
+                throw new Error('يرجى إدخال معرف الجلسة و Webhook URL');
             }
-
-            if (mode === 'pair' && !phoneNumber) {
-                showAlert('connect-alert', 'يرجى إدخال رقم الهاتف', 'error');
-                return;
-            }
-
-            const btn = event.target;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> جاري الاتصال...';
-            btn.disabled = true;
-
-            try {
-                const payload = {
-                    mode,
-                    webhookUrl,
-                    reset
-                };
-
-                if (webhookSecret) {
-                    payload.webhookSecret = webhookSecret;
-                }
-
-                if (mode === 'pair') {
-                    payload.phoneNumber = phoneNumber;
-                }
-
-                const response = await fetch(`${API_BASE}/sessions/${sessionId}/connect`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify(payload)
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    if (data.qr) {
-                        document.getElementById('qr-image').src = data.qr;
-                        document.getElementById('qr-container').classList.remove('hidden');
-                        document.getElementById('pairing-code-container').classList.add('hidden');
-                        showAlert('connect-alert', 'تم إنشاء QR Code بنجاح! امسحه من تطبيق WhatsApp', 'success');
-                    } else if (data.pairingCode) {
-                        document.getElementById('pairing-code').textContent = data.pairingCode;
-                        document.getElementById('pairing-code-container').classList.remove('hidden');
-                        document.getElementById('qr-container').classList.add('hidden');
-                        showAlert('connect-alert', `كود الاقتران: ${data.pairingCode}`, 'success');
-                    } else {
-                        showAlert('connect-alert', 'تم الاتصال بنجاح!', 'success');
-                        document.getElementById('qr-container').classList.add('hidden');
-                        document.getElementById('pairing-code-container').classList.add('hidden');
-                    }
-                } else {
-                    showAlert('connect-alert', `خطأ: ${data.error}`, 'error');
-                }
-            } catch (error) {
-                showAlert('connect-alert', `خطأ في الاتصال: ${error.message}`, 'error');
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
+            if (connectionInput.mode === 'pair' && !connectionInput.phoneNumber) {
+                throw new Error('يرجى إدخال رقم الهاتف');
             }
         }
 
-        async function sendMessage() {
+        function connectionRequestBody(connectionInput) {
+            const requestBody = {
+                mode: connectionInput.mode,
+                webhookUrl: connectionInput.webhookUrl,
+                reset: connectionInput.reset
+            };
+            if (connectionInput.webhookSecret) {
+                requestBody.webhookSecret = connectionInput.webhookSecret;
+            }
+            if (connectionInput.mode === 'pair') {
+                requestBody.phoneNumber = connectionInput.phoneNumber;
+            }
+            return requestBody;
+        }
+
+        function showQrConnection(qr) {
+            document.getElementById('qr-image').src = qr;
+            document.getElementById('qr-container').classList.remove('hidden');
+            document.getElementById('pairing-code-container').classList.add('hidden');
+            showAlert('connect-alert', 'تم إنشاء QR Code بنجاح! امسحه من تطبيق WhatsApp', 'success');
+        }
+
+        function showPairingConnection(pairingCode) {
+            document.getElementById('pairing-code').textContent = pairingCode;
+            document.getElementById('pairing-code-container').classList.remove('hidden');
+            document.getElementById('qr-container').classList.add('hidden');
+            showAlert('connect-alert', `كود الاقتران: ${pairingCode}`, 'success');
+        }
+
+        function showPendingConnection() {
+            document.getElementById('qr-container').classList.add('hidden');
+            document.getElementById('pairing-code-container').classList.add('hidden');
+            showAlert('connect-alert', 'تم بدء الجلسة بنجاح.', 'success');
+        }
+
+        function showConnectionSuccess(connectionResponse) {
+            if (connectionResponse.qr) {
+                showQrConnection(connectionResponse.qr);
+                return;
+            }
+            if (connectionResponse.pairingCode) {
+                showPairingConnection(connectionResponse.pairingCode);
+                return;
+            }
+            showPendingConnection();
+        }
+
+        async function requestSessionConnection(connectionInput) {
+            const response = await fetch(`${API_BASE}/sessions/${connectionInput.sessionId}/connect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(connectionRequestBody(connectionInput))
+            });
+            const connectionResponse = await response.json();
+            if (!response.ok) throw new Error(connectionResponse.error || 'فشل إنشاء الجلسة');
+            return connectionResponse;
+        }
+
+        async function connectSession(actionButton) {
+            const originalText = actionButton.innerHTML;
+            try {
+                const connectionInput = connectionFormInput();
+                validateConnectionInput(connectionInput);
+                actionButton.innerHTML = '<span class="loading"></span> جاري الاتصال...';
+                actionButton.disabled = true;
+                const connectionResponse = await requestSessionConnection(connectionInput);
+                await loadSessions();
+                showConnectionSuccess(connectionResponse);
+            } catch (error) {
+                showAlert('connect-alert', `خطأ في الاتصال: ${error.message}`, 'error');
+            } finally {
+                actionButton.innerHTML = originalText;
+                actionButton.disabled = false;
+            }
+        }
+
+        async function sendMessage(actionButton) {
             const sessionId = document.getElementById('send-session-id').value;
             const to = document.getElementById('send-to').value;
             const message = document.getElementById('message-text').value;
@@ -700,10 +749,9 @@
                 return;
             }
 
-            const btn = event.target;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> جاري الإرسال...';
-            btn.disabled = true;
+            const originalText = actionButton.innerHTML;
+            actionButton.innerHTML = '<span class="loading"></span> جاري الإرسال...';
+            actionButton.disabled = true;
 
             try {
                 const response = await fetch(`${API_BASE}/sessions/${sessionId}/send`, {
@@ -715,19 +763,19 @@
                     body: JSON.stringify({ to, message })
                 });
 
-                const data = await response.json();
+                const messageResponse = await response.json();
 
                 if (response.ok) {
-                    showAlert('send-alert', `تم إرسال الرسالة بنجاح! (ID: ${data.id})`, 'success');
+                    showAlert('send-alert', `تم إرسال الرسالة بنجاح! (ID: ${messageResponse.id})`, 'success');
                     document.getElementById('message-text').value = '';
                 } else {
-                    showAlert('send-alert', `خطأ: ${data.error}`, 'error');
+                    showAlert('send-alert', `خطأ: ${messageResponse.error}`, 'error');
                 }
             } catch (error) {
                 showAlert('send-alert', `خطأ في الإرسال: ${error.message}`, 'error');
             } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
+                actionButton.innerHTML = originalText;
+                actionButton.disabled = false;
             }
         }
 
@@ -743,7 +791,7 @@
             }
         }
 
-        async function sendPoll() {
+        async function sendPoll(actionButton) {
             const sessionId = document.getElementById('poll-session-id').value;
             const to = document.getElementById('poll-to').value;
             const name = document.getElementById('poll-name').value;
@@ -761,10 +809,9 @@
                 return;
             }
 
-            const btn = event.target;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> جاري الإرسال...';
-            btn.disabled = true;
+            const originalText = actionButton.innerHTML;
+            actionButton.innerHTML = '<span class="loading"></span> جاري الإرسال...';
+            actionButton.disabled = true;
 
             try {
                 const response = await fetch(`${API_BASE}/sessions/${sessionId}/send-poll`, {
@@ -774,22 +821,22 @@
                     body: JSON.stringify({ to, name, options, selectableCount })
                 });
 
-                const data = await response.json();
+                const pollResponse = await response.json();
                 if (response.ok) {
-                    showAlert('poll-alert', `تم إرسال الاستطلاع بنجاح! (ID: ${data.id})`, 'success');
+                    showAlert('poll-alert', `تم إرسال الاستطلاع بنجاح! (ID: ${pollResponse.id})`, 'success');
                     document.getElementById('poll-options').value = '';
                 } else {
-                    showAlert('poll-alert', `خطأ: ${data.error}`, 'error');
+                    showAlert('poll-alert', `خطأ: ${pollResponse.error}`, 'error');
                 }
             } catch (error) {
                 showAlert('poll-alert', `خطأ في الإرسال: ${error.message}`, 'error');
             } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
+                actionButton.innerHTML = originalText;
+                actionButton.disabled = false;
             }
         }
 
-        async function sendButtons() {
+        async function sendButtons(actionButton) {
             const sessionId = document.getElementById('buttons-session-id').value;
             const to = document.getElementById('buttons-to').value;
             const text = document.getElementById('buttons-text').value;
@@ -813,10 +860,9 @@
                 return;
             }
 
-            const btn = event.target;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> جاري الإرسال...';
-            btn.disabled = true;
+            const originalText = actionButton.innerHTML;
+            actionButton.innerHTML = '<span class="loading"></span> جاري الإرسال...';
+            actionButton.disabled = true;
 
             try {
                 const payload = { to, text, buttons };
@@ -829,22 +875,22 @@
                     body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
+                const buttonsResponse = await response.json();
                 if (response.ok) {
-                    showAlert('buttons-alert', `تم إرسال الأزرار بنجاح! (ID: ${data.id})`, 'success');
+                    showAlert('buttons-alert', `تم إرسال الأزرار بنجاح! (ID: ${buttonsResponse.id})`, 'success');
                     document.getElementById('buttons-list').value = '';
                 } else {
-                    showAlert('buttons-alert', `خطأ: ${data.error}`, 'error');
+                    showAlert('buttons-alert', `خطأ: ${buttonsResponse.error}`, 'error');
                 }
             } catch (error) {
                 showAlert('buttons-alert', `خطأ في الإرسال: ${error.message}`, 'error');
             } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
+                actionButton.innerHTML = originalText;
+                actionButton.disabled = false;
             }
         }
 
-        async function sendInteractive() {
+        async function sendInteractive(actionButton) {
             const sessionId = document.getElementById('interactive-session-id').value;
             const to = document.getElementById('interactive-to').value;
             const text = document.getElementById('interactive-text').value;
@@ -875,10 +921,9 @@
                 buttonParams = { url, display_text: displayText };
             }
 
-            const btn = event.target;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="loading"></span> جاري الإرسال...';
-            btn.disabled = true;
+            const originalText = actionButton.innerHTML;
+            actionButton.innerHTML = '<span class="loading"></span> جاري الإرسال...';
+            actionButton.disabled = true;
 
             try {
                 const payload = {
@@ -898,21 +943,60 @@
                     body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
+                const interactiveResponse = await response.json();
                 if (response.ok) {
-                    showAlert('interactive-alert', `تم إرسال الرسالة التفاعلية بنجاح! (ID: ${data.id})`, 'success');
+                    showAlert('interactive-alert', `تم إرسال الرسالة التفاعلية بنجاح! (ID: ${interactiveResponse.id})`, 'success');
                 } else {
-                    showAlert('interactive-alert', `خطأ: ${data.error}`, 'error');
+                    showAlert('interactive-alert', `خطأ: ${interactiveResponse.error}`, 'error');
                 }
             } catch (error) {
                 showAlert('interactive-alert', `خطأ في الإرسال: ${error.message}`, 'error');
             } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
+                actionButton.innerHTML = originalText;
+                actionButton.disabled = false;
             }
         }
 
-        // Toggle interactive button type
+        function logLevelName(level) {
+            if (level >= 60) return 'FATAL';
+            if (level >= 50) return 'ERROR';
+            if (level >= 40) return 'WARN';
+            if (level >= 30) return 'INFO';
+            return 'DEBUG';
+        }
+
+        function formatLogEntry(entry) {
+            const timestamp = entry.time ? new Date(entry.time).toLocaleString('ar') : '-';
+            const context = { ...entry };
+            delete context.level;
+            delete context.time;
+            delete context.msg;
+            const contextText = Object.keys(context).length
+                ? `\n${JSON.stringify(context, null, 2)}`
+                : '';
+            return `${timestamp} [${logLevelName(entry.level)}] ${entry.msg || ''}${contextText}`;
+        }
+
+        async function loadLogs() {
+            try {
+                const response = await fetch(`${API_BASE}/logs?limit=200`, {
+                    credentials: 'include'
+                });
+                if (response.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                const logResponse = await response.json();
+                if (!response.ok) throw new Error(logResponse.error || 'تعذر تحميل السجل');
+                document.getElementById('log-file-path').textContent = logResponse.logFile;
+                document.getElementById('logs-output').textContent = logResponse.entries.length
+                    ? logResponse.entries.map(formatLogEntry).join('\n\n')
+                    : 'لا توجد سجلات حتى الآن.';
+            } catch (error) {
+                showAlert('logs-alert', `خطأ في تحميل السجل: ${error.message}`, 'error');
+            }
+        }
+
         document.getElementById('interactive-type').addEventListener('change', function () {
             const type = this.value;
             document.getElementById('interactive-quick-reply').style.display =
@@ -921,7 +1005,6 @@
                 type === 'cta_url' ? 'block' : 'none';
         });
 
-        // Load sessions on page load
         window.addEventListener('load', () => {
             loadSessions();
         });

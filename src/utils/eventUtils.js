@@ -14,7 +14,7 @@ export function safeStringify(value, logger) {
   try {
     return JSON.stringify(value);
   } catch (error) {
-    logger.warn({ error }, 'event payload not serializable');
+    logger.warn({ err: error }, 'event payload not serializable');
     return '';
   }
 }
