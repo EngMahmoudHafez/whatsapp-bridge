@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Bridge - لوحة التحكم</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            direction: rtl;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            border: 2px solid #e9ecef;
+        }
+
+        .section h2 {
+            color: #128C7E;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 3px solid #25D366;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #25D366;
+            box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(37, 211, 102, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin: 5px;
+        }
+
+        .status-open {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-closed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .qr-container {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            border: 2px dashed #25D366;
+        }
+
+        .qr-container img {
+            max-width: 300px;
+            border-radius: 10px;
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #f5c6cb;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 2px solid #bee5eb;
+        }
+
+        .sessions-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .session-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s;
+        }
+
+        .session-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            border-color: #25D366;
+        }
+
+        .session-card h3 {
+            color: #128C7E;
+            margin-bottom: 10px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .tab {
+            padding: 15px 25px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #6c757d;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #25D366;
+            border-bottom-color: #25D366;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>📱 WhatsApp Bridge</h1>
+                    <p>لوحة التحكم - إدارة جلسات WhatsApp</p>
+                </div>
+                <button class="btn btn-danger" onclick="logout()" style="margin: 0;">تسجيل الخروج</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('sessions')">الجلسات</button>
+                <button class="tab" onclick="switchTab('connect')">اتصال جديد</button>
+                <button class="tab" onclick="switchTab('send')">إرسال رسالة</button>
+                <button class="tab" onclick="switchTab('poll')">إرسال استطلاع</button>
+                <button class="tab" onclick="switchTab('buttons')">إرسال أزرار</button>
+                <button class="tab" onclick="switchTab('interactive')">رسالة تفاعلية</button>
+            </div>
+
+            <!-- Sessions Tab -->
+            <div id="sessions-tab" class="tab-content active">
+                <div class="section">
+                    <h2>الجلسات النشطة</h2>
+                    <button class="btn btn-primary" onclick="loadSessions()">🔄 تحديث القائمة</button>
+                    <div id="sessions-list" class="sessions-list"></div>
+                </div>
+            </div>
+
+            <!-- Connect Tab -->
+            <div id="connect-tab" class="tab-content">
+                <div class="section">
+                    <h2>اتصال بجلسة جديدة</h2>
+                    <div id="connect-alert"></div>
+
+                    <div class="form-group">
+                        <label>معرف الجلسة (Session ID):</label>
+                        <input type="text" id="session-id" placeholder="مثال: demo" value="demo">
+                    </div>
+
+                    <div class="form-group">
+                        <label>طريقة الاتصال:</label>
+                        <select id="connection-mode" onchange="togglePhoneNumber()">
+                            <option value="qr">QR Code</option>
+                            <option value="pair">Pairing Code</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="phone-number-group" style="display: none;">
+                        <label>رقم الهاتف:</label>
+                        <input type="text" id="phone-number" placeholder="201234567890">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Webhook URL:</label>
+                        <input type="url" id="webhook-url" placeholder="https://your-app.com/webhook"
+                            value="https://your-laravel-app.test/webhooks/whatsapp">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Webhook Secret (اختياري):</label>
+                        <input type="text" id="webhook-secret" placeholder="optional-secret">
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="reset-session" checked> إعادة تعيين الجلسة
+                        </label>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="connectSession()">🔗 الاتصال</button>
+
+                    <div id="qr-container" class="qr-container hidden">
+                        <h3>QR Code للاتصال:</h3>
+                        <img id="qr-image" src="" alt="QR Code">
+                        <p style="margin-top: 15px; color: #666;">امسح هذا الكود من تطبيق WhatsApp</p>
+                    </div>
+
+                    <div id="pairing-code-container" class="alert alert-info hidden">
+                        <h3>كود الاقتران:</h3>
+                        <p id="pairing-code" style="font-size: 1.5em; font-weight: bold; margin: 10px 0;"></p>
+                        <p>أدخل هذا الكود في تطبيق WhatsApp</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Send Message Tab -->
+            <div id="send-tab" class="tab-content">
+                <div class="section">
+                    <h2>إرسال رسالة</h2>
+                    <div id="send-alert"></div>
+
+                    <div class="form-group">
+                        <label>معرف الجلسة:</label>
+                        <input type="text" id="send-session-id" placeholder="demo" value="demo">
+                    </div>
+
+                    <div class="form-group">
+                        <label>إلى (رقم الهاتف):</label>
+                        <input type="text" id="send-to" placeholder="201234567890">
+                    </div>
+
+                    <div class="form-group">
+                        <label>الرسالة:</label>
+                        <textarea id="message-text" rows="5" placeholder="اكتب رسالتك هنا..."></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="sendMessage()">📤 إرسال</button>
+                </div>
+            </div>
+
+            <!-- Send Poll Tab -->
+            <div id="poll-tab" class="tab-content">
+                <div class="section">
+                    <h2>إرسال استطلاع</h2>
+                    <div id="poll-alert"></div>
+
+                    <div class="form-group">
+                        <label>معرف الجلسة:</label>
+                        <input type="text" id="poll-session-id" placeholder="demo" value="demo">
+                    </div>
+
+                    <div class="form-group">
+                        <label>إلى (رقم الهاتف):</label>
+                        <input type="text" id="poll-to" placeholder="201234567890">
+                    </div>
+
+                    <div class="form-group">
+                        <label>اسم الاستطلاع:</label>
+                        <input type="text" id="poll-name" placeholder="اختر خيار">
+                    </div>
+
+                    <div class="form-group">
+                        <label>الخيارات (كل خيار في سطر):</label>
+                        <textarea id="poll-options" rows="5"
+                            placeholder="الخيار 1&#10;الخيار 2&#10;الخيار 3"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>عدد الخيارات القابلة للاختيار:</label>
+                        <input type="number" id="poll-selectable" value="1" min="1">
+                    </div>
+
+                    <button class="btn btn-primary" onclick="sendPoll()">📊 إرسال استطلاع</button>
+                </div>
+            </div>
+
+            <!-- Send Buttons Tab -->
+            <div id="buttons-tab" class="tab-content">
+                <div class="section">
+                    <h2>إرسال أزرار</h2>
+                    <div id="buttons-alert"></div>
+
+                    <div class="form-group">
+                        <label>معرف الجلسة:</label>
+                        <input type="text" id="buttons-session-id" placeholder="demo" value="demo">
+                    </div>
+
+                    <div class="form-group">
+                        <label>إلى (رقم الهاتف):</label>
+                        <input type="text" id="buttons-to" placeholder="201234567890">
+                    </div>
+
+                    <div class="form-group">
+                        <label>النص:</label>
+                        <textarea id="buttons-text" rows="3" placeholder="اختر خيار"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>الأزرار (كل زر في سطر، الصيغة: id|text):</label>
+                        <textarea id="buttons-list" rows="5" placeholder="opt1|الخيار 1&#10;opt2|الخيار 2"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Footer (اختياري):</label>
+                        <input type="text" id="buttons-footer" placeholder="Footer text">
+                    </div>
+
+                    <button class="btn btn-primary" onclick="sendButtons()">🔘 إرسال أزرار</button>
+                </div>
+            </div>
+
+            <!-- Send Interactive Tab -->
+            <div id="interactive-tab" class="tab-content">
+                <div class="section">
+                    <h2>رسالة تفاعلية</h2>
+                    <div id="interactive-alert"></div>
+
+                    <div class="form-group">
+                        <label>معرف الجلسة:</label>
+                        <input type="text" id="interactive-session-id" placeholder="demo" value="demo">
+                    </div>
+
+                    <div class="form-group">
+                        <label>إلى (رقم الهاتف):</label>
+                        <input type="text" id="interactive-to" placeholder="201234567890">
+                    </div>
+
+                    <div class="form-group">
+                        <label>النص:</label>
+                        <textarea id="interactive-text" rows="3" placeholder="اختر خيار"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Footer (اختياري):</label>
+                        <input type="text" id="interactive-footer" placeholder="Footer text">
+                    </div>
+
+                    <div class="form-group">
+                        <label>نوع الزر:</label>
+                        <select id="interactive-type">
+                            <option value="quick_reply">Quick Reply</option>
+                            <option value="cta_url">CTA URL</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="interactive-quick-reply">
+                        <label>Quick Reply ID:</label>
+                        <input type="text" id="interactive-quick-id" placeholder="yes">
+                        <label style="margin-top: 10px;">Display Text:</label>
+                        <input type="text" id="interactive-quick-text" placeholder="نعم">
+                    </div>
+
+                    <div class="form-group hidden" id="interactive-cta">
+                        <label>URL:</label>
+                        <input type="url" id="interactive-cta-url" placeholder="https://example.com">
+                        <label style="margin-top: 10px;">Display Text:</label>
+                        <input type="text" id="interactive-cta-text" placeholder="فتح الموقع">
+                    </div>
+
+                    <button class="btn btn-primary" onclick="sendInteractive()">🎯 إرسال رسالة تفاعلية</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function togglePhoneNumber() {
+            const mode = document.getElementById('connection-mode').value;
+            const phoneGroup = document.getElementById('phone-number-group');
+            if (mode === 'pair') {
+                phoneGroup.style.display = 'block';
+            } else {
+                phoneGroup.style.display = 'none';
+            }
+        }
+
+        function showAlert(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        async function loadSessions() {
+            try {
+                const response = await fetch(`${API_BASE}/sessions`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                const container = document.getElementById('sessions-list');
+
+                if (data.sessions && data.sessions.length > 0) {
+                    container.innerHTML = data.sessions.map(session => `
+                        <div class="session-card">
+                            <h3>${session.id}</h3>
+                            <p><strong>الحالة:</strong> 
+                                <span class="status-badge status-${session.status}">${session.status}</span>
+                            </p>
+                            ${session.lastMessageAt ? `<p><strong>آخر رسالة:</strong> ${new Date(session.lastMessageAt).toLocaleString('ar')}</p>` : ''}
+                            <button class="btn btn-secondary" onclick="viewSession('${session.id}')" style="margin-top: 10px;">عرض التفاصيل</button>
+                            <button class="btn btn-danger" onclick="deleteSession('${session.id}')" style="margin-top: 10px;">حذف</button>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">لا توجد جلسات نشطة</p>';
+                }
+            } catch (error) {
+                showAlert('sessions-list', `خطأ في تحميل الجلسات: ${error.message}`, 'error');
+            }
+        }
+
+        async function viewSession(sessionId) {
+            try {
+                const response = await fetch(`${API_BASE}/sessions/${sessionId}`, {
+                    credentials: 'include'
+                });
+                const session = await response.json();
+                alert(`الجلسة: ${session.id}\nالحالة: ${session.status}\nرقم الهاتف: ${session.phoneNumber || 'غير متصل'}`);
+            } catch (error) {
+                showAlert('sessions-list', `خطأ: ${error.message}`, 'error');
+            }
+        }
+
+        async function deleteSession(sessionId) {
+            if (!confirm(`هل أنت متأكد من حذف الجلسة "${sessionId}"?`)) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/sessions/${sessionId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    showAlert('sessions-list', 'تم حذف الجلسة بنجاح', 'success');
+                    loadSessions();
+                } else {
+                    const error = await response.json();
+                    showAlert('sessions-list', `خطأ: ${error.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert('sessions-list', `خطأ: ${error.message}`, 'error');
+            }
+        }
+
+        async function connectSession() {
+            const sessionId = document.getElementById('session-id').value;
+            const mode = document.getElementById('connection-mode').value;
+            const phoneNumber = document.getElementById('phone-number').value;
+            const webhookUrl = document.getElementById('webhook-url').value;
+            const webhookSecret = document.getElementById('webhook-secret').value;
+            const reset = document.getElementById('reset-session').checked;
+
+            if (!sessionId || !webhookUrl) {
+                showAlert('connect-alert', 'يرجى إدخال معرف الجلسة و Webhook URL', 'error');
+                return;
+            }
+
+            if (mode === 'pair' && !phoneNumber) {
+                showAlert('connect-alert', 'يرجى إدخال رقم الهاتف', 'error');
+                return;
+            }
+
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> جاري الاتصال...';
+            btn.disabled = true;
+
+            try {
+                const payload = {
+                    mode,
+                    webhookUrl,
+                    reset
+                };
+
+                if (webhookSecret) {
+                    payload.webhookSecret = webhookSecret;
+                }
+
+                if (mode === 'pair') {
+                    payload.phoneNumber = phoneNumber;
+                }
+
+                const response = await fetch(`${API_BASE}/sessions/${sessionId}/connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.qr) {
+                        document.getElementById('qr-image').src = data.qr;
+                        document.getElementById('qr-container').classList.remove('hidden');
+                        document.getElementById('pairing-code-container').classList.add('hidden');
+                        showAlert('connect-alert', 'تم إنشاء QR Code بنجاح! امسحه من تطبيق WhatsApp', 'success');
+                    } else if (data.pairingCode) {
+                        document.getElementById('pairing-code').textContent = data.pairingCode;
+                        document.getElementById('pairing-code-container').classList.remove('hidden');
+                        document.getElementById('qr-container').classList.add('hidden');
+                        showAlert('connect-alert', `كود الاقتران: ${data.pairingCode}`, 'success');
+                    } else {
+                        showAlert('connect-alert', 'تم الاتصال بنجاح!', 'success');
+                        document.getElementById('qr-container').classList.add('hidden');
+                        document.getElementById('pairing-code-container').classList.add('hidden');
+                    }
+                } else {
+                    showAlert('connect-alert', `خطأ: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert('connect-alert', `خطأ في الاتصال: ${error.message}`, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function sendMessage() {
+            const sessionId = document.getElementById('send-session-id').value;
+            const to = document.getElementById('send-to').value;
+            const message = document.getElementById('message-text').value;
+
+            if (!sessionId || !to || !message) {
+                showAlert('send-alert', 'يرجى ملء جميع الحقول', 'error');
+                return;
+            }
+
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> جاري الإرسال...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/sessions/${sessionId}/send`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ to, message })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showAlert('send-alert', `تم إرسال الرسالة بنجاح! (ID: ${data.id})`, 'success');
+                    document.getElementById('message-text').value = '';
+                } else {
+                    showAlert('send-alert', `خطأ: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert('send-alert', `خطأ في الإرسال: ${error.message}`, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetch(`${API_BASE}/auth/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                window.location.href = '/login.html';
+            } catch (error) {
+                window.location.href = '/login.html';
+            }
+        }
+
+        async function sendPoll() {
+            const sessionId = document.getElementById('poll-session-id').value;
+            const to = document.getElementById('poll-to').value;
+            const name = document.getElementById('poll-name').value;
+            const optionsText = document.getElementById('poll-options').value;
+            const selectableCount = parseInt(document.getElementById('poll-selectable').value);
+
+            if (!sessionId || !to || !name || !optionsText) {
+                showAlert('poll-alert', 'يرجى ملء جميع الحقول', 'error');
+                return;
+            }
+
+            const options = optionsText.split('\n').filter(opt => opt.trim());
+            if (options.length < 2) {
+                showAlert('poll-alert', 'يجب إدخال على الأقل خيارين', 'error');
+                return;
+            }
+
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> جاري الإرسال...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/sessions/${sessionId}/send-poll`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ to, name, options, selectableCount })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showAlert('poll-alert', `تم إرسال الاستطلاع بنجاح! (ID: ${data.id})`, 'success');
+                    document.getElementById('poll-options').value = '';
+                } else {
+                    showAlert('poll-alert', `خطأ: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert('poll-alert', `خطأ في الإرسال: ${error.message}`, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function sendButtons() {
+            const sessionId = document.getElementById('buttons-session-id').value;
+            const to = document.getElementById('buttons-to').value;
+            const text = document.getElementById('buttons-text').value;
+            const buttonsText = document.getElementById('buttons-list').value;
+            const footer = document.getElementById('buttons-footer').value;
+
+            if (!sessionId || !to || !text || !buttonsText) {
+                showAlert('buttons-alert', 'يرجى ملء جميع الحقول المطلوبة', 'error');
+                return;
+            }
+
+            const buttons = buttonsText.split('\n')
+                .filter(line => line.trim())
+                .map(line => {
+                    const [id, ...textParts] = line.split('|');
+                    return { id: id.trim(), text: textParts.join('|').trim() };
+                });
+
+            if (buttons.length === 0) {
+                showAlert('buttons-alert', 'يجب إدخال على الأقل زر واحد', 'error');
+                return;
+            }
+
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> جاري الإرسال...';
+            btn.disabled = true;
+
+            try {
+                const payload = { to, text, buttons };
+                if (footer) payload.footer = footer;
+
+                const response = await fetch(`${API_BASE}/sessions/${sessionId}/send-buttons`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showAlert('buttons-alert', `تم إرسال الأزرار بنجاح! (ID: ${data.id})`, 'success');
+                    document.getElementById('buttons-list').value = '';
+                } else {
+                    showAlert('buttons-alert', `خطأ: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert('buttons-alert', `خطأ في الإرسال: ${error.message}`, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function sendInteractive() {
+            const sessionId = document.getElementById('interactive-session-id').value;
+            const to = document.getElementById('interactive-to').value;
+            const text = document.getElementById('interactive-text').value;
+            const footer = document.getElementById('interactive-footer').value;
+            const type = document.getElementById('interactive-type').value;
+
+            if (!sessionId || !to || !text) {
+                showAlert('interactive-alert', 'يرجى ملء جميع الحقول المطلوبة', 'error');
+                return;
+            }
+
+            let buttonParams = {};
+            if (type === 'quick_reply') {
+                const id = document.getElementById('interactive-quick-id').value;
+                const displayText = document.getElementById('interactive-quick-text').value;
+                if (!id || !displayText) {
+                    showAlert('interactive-alert', 'يرجى ملء حقول Quick Reply', 'error');
+                    return;
+                }
+                buttonParams = { id, display_text: displayText };
+            } else if (type === 'cta_url') {
+                const url = document.getElementById('interactive-cta-url').value;
+                const displayText = document.getElementById('interactive-cta-text').value;
+                if (!url || !displayText) {
+                    showAlert('interactive-alert', 'يرجى ملء حقول CTA URL', 'error');
+                    return;
+                }
+                buttonParams = { url, display_text: displayText };
+            }
+
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading"></span> جاري الإرسال...';
+            btn.disabled = true;
+
+            try {
+                const payload = {
+                    to,
+                    text,
+                    interactiveButtons: [{
+                        name: type === 'quick_reply' ? 'quick_reply' : 'cta_url',
+                        buttonParamsJson: buttonParams
+                    }]
+                };
+                if (footer) payload.footer = footer;
+
+                const response = await fetch(`${API_BASE}/sessions/${sessionId}/send-interactive`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    showAlert('interactive-alert', `تم إرسال الرسالة التفاعلية بنجاح! (ID: ${data.id})`, 'success');
+                } else {
+                    showAlert('interactive-alert', `خطأ: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert('interactive-alert', `خطأ في الإرسال: ${error.message}`, 'error');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // Toggle interactive button type
+        document.getElementById('interactive-type').addEventListener('change', function () {
+            const type = this.value;
+            document.getElementById('interactive-quick-reply').style.display =
+                type === 'quick_reply' ? 'block' : 'none';
+            document.getElementById('interactive-cta').style.display =
+                type === 'cta_url' ? 'block' : 'none';
+        });
+
+        // Load sessions on page load
+        window.addEventListener('load', () => {
+            loadSessions();
+        });
+    </script>
+</body>
+
+</html>
