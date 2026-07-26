@@ -1,4 +1,4 @@
-import { sessions, getOrCreateSession, cleanupSession, waitForSessionQr, saveSessionConfig } from '../services/sessionService.js';
+import { sessions, getOrCreateSession, deleteStoredSession, waitForSessionQr, saveSessionConfig } from '../services/sessionService.js';
 import { sanitizeSessionId, buildWebhookConfig } from '../utils/validation.js';
 import { logger } from '../logger.js';
 
@@ -43,26 +43,35 @@ function connectionRequest(req) {
   const sessionId = sanitizeSessionId(req.params.id);
   const { mode = 'qr', phoneNumber, waitMs, webhookUrl, webhookSecret, reset } = req.body || {};
   if (mode !== 'qr' && mode !== 'pair') throw badRequest("mode must be 'qr' or 'pair'.");
-  if (!webhookUrl) throw badRequest('webhookUrl is required.');
   if (mode === 'pair' && (!phoneNumber || typeof phoneNumber !== 'string')) {
     throw badRequest('phoneNumber is required for pair mode.');
   }
-  const webhook = buildWebhookConfig(
-    { webhookUrl, webhookSecret },
-    sessions.get(sessionId)?.webhook
-  );
-  if (!webhook) throw badRequest('webhookUrl is invalid or could not be configured.');
-  return { sessionId, mode, phoneNumber, waitMs, reset: Boolean(reset), webhook };
+  return {
+    sessionId,
+    mode,
+    phoneNumber,
+    waitMs,
+    reset: Boolean(reset),
+    webhookUrl,
+    webhookSecret
+  };
 }
 
 async function configuredSession(connection) {
-  const existingSession = sessions.get(connection.sessionId);
-  if (connection.reset || existingSession?.status !== 'open') {
-    await cleanupSession(connection.sessionId, true, logger);
+  if (connection.reset) {
+    await deleteStoredSession(connection.sessionId, logger);
   }
   const session = await getOrCreateSession(connection.sessionId, logger);
-  session.webhook = connection.webhook;
-  await saveSessionConfig(session.authPath, { webhook: session.webhook }, logger);
+  if (connection.webhookUrl !== undefined || connection.webhookSecret !== undefined) {
+    session.webhook = buildWebhookConfig(
+      {
+        webhookUrl: connection.webhookUrl,
+        webhookSecret: connection.webhookSecret
+      },
+      session.webhook
+    );
+    await saveSessionConfig(session.authPath, { webhook: session.webhook }, logger);
+  }
   return session;
 }
 
@@ -128,10 +137,25 @@ export async function getSessionQr(req, res, next) {
   }
 }
 
+export async function pairSession(req, res, next) {
+  try {
+    const sessionId = sanitizeSessionId(req.params.id);
+    const { phoneNumber } = req.body || {};
+    if (!phoneNumber || typeof phoneNumber !== 'string') {
+      throw badRequest('phoneNumber is required.');
+    }
+    const session = await getOrCreateSession(sessionId, logger);
+    const pairingCode = await session.sock.requestPairingCode(phoneNumber);
+    res.json({ sessionId, pairingCode });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function deleteSession(req, res, next) {
   try {
     const sessionId = sanitizeSessionId(req.params.id);
-    await cleanupSession(sessionId, true, logger);
+    await deleteStoredSession(sessionId, logger);
     res.json({ id: sessionId, status: 'logged_out', deleted: true });
   } catch (error) {
     next(error);

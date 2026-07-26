@@ -31,20 +31,30 @@ export function shouldSendEvent(session, eventId) {
 export async function postWebhook(session, payload, eventId, logger) {
   const webhook = session?.webhook || null;
   if (!webhook?.url) return;
-  try {
-    await axios.post(webhook.url, payload, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(eventId ? { 'x-event-id': eventId } : {}),
-        ...(webhook.secret ? { 'x-webhook-secret': webhook.secret } : {})
-      },
-      timeout: 10000
-    });
-  } catch (error) {
-    logger.error(
-      { err: error, sessionId: session.id },
-      'webhook request failed'
-    );
+  const attempts = Math.max(1, config.WEBHOOK_RETRIES);
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await axios.post(webhook.url, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(eventId ? { 'x-event-id': eventId } : {}),
+          ...(webhook.secret ? { 'x-webhook-secret': webhook.secret } : {})
+        },
+        timeout: config.WEBHOOK_TIMEOUT_MS
+      });
+      return;
+    } catch (error) {
+      if (attempt === attempts) {
+        logger.error({ err: error, sessionId: session.id, attempt }, 'webhook request failed');
+        return;
+      }
+      const retryDelay = 1000 * 2 ** (attempt - 1);
+      logger.warn(
+        { err: error, sessionId: session.id, attempt, retryDelay },
+        'webhook request failed, retrying'
+      );
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    }
   }
 }
 

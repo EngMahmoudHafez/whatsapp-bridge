@@ -2,10 +2,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import qrcode from 'qrcode';
 import qrcodeTerminal from 'qrcode-terminal';
+import NodeCache from '@cacheable/node-cache';
 import {
   makeWASocket,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
   useMultiFileAuthState
 } from '@whiskeysockets/baileys';
 import { jidNormalizedUser } from '@whiskeysockets/baileys/lib/WABinary/jid-utils.js';
@@ -24,9 +26,107 @@ import { emitWebhookEvent } from './webhookService.js';
 
 export const sessions = new Map();
 export const sessionLocks = new Map();
+const sessionDeletionLocks = new Map();
+const reconnectTimers = new Map();
+const ownedSessionProcessLocks = new Map();
+const messageRetryCaches = new Map();
+let isShuttingDown = false;
 
 async function ensureDir(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
+}
+
+function createSessionInUseError(sessionId) {
+  const error = new Error(`Session '${sessionId}' is already running in another bridge process.`);
+  error.statusCode = 409;
+  return error;
+}
+
+async function createSessionProcessLockFile(lockPath) {
+  const handle = await fs.open(lockPath, 'wx');
+  try {
+    await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
+  } finally {
+    await handle.close();
+  }
+}
+
+async function sessionProcessLockIsStale(lockPath) {
+  try {
+    const stats = await fs.stat(lockPath);
+    return Date.now() - stats.mtimeMs > config.SESSION_PROCESS_LOCK_STALE_MS;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return true;
+    throw error;
+  }
+}
+
+async function removeSessionProcessLockFile(lockPath) {
+  try {
+    await fs.unlink(lockPath);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}
+
+async function replaceStaleSessionProcessLock(sessionId, lockPath, logger) {
+  if (!(await sessionProcessLockIsStale(lockPath))) throw createSessionInUseError(sessionId);
+  logger.warn({ sessionId, lockPath }, 'removing stale session process lock');
+  await removeSessionProcessLockFile(lockPath);
+  try {
+    await createSessionProcessLockFile(lockPath);
+  } catch (error) {
+    if (error?.code === 'EEXIST') throw createSessionInUseError(sessionId);
+    throw error;
+  }
+}
+
+async function acquireSessionProcessLock(sessionId, logger) {
+  if (ownedSessionProcessLocks.has(sessionId)) return;
+  const authPath = path.join(config.SESSION_DIR, sessionId);
+  const lockPath = path.join(authPath, config.SESSION_PROCESS_LOCK_FILE);
+  await ensureDir(authPath);
+
+  try {
+    await createSessionProcessLockFile(lockPath);
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+    await replaceStaleSessionProcessLock(sessionId, lockPath, logger);
+  }
+
+  ownedSessionProcessLocks.set(sessionId, lockPath);
+  logger.info({ sessionId }, 'session process lock acquired');
+}
+
+async function releaseSessionProcessLock(sessionId, logger) {
+  const lockPath = ownedSessionProcessLocks.get(sessionId);
+  if (!lockPath) return;
+  await removeSessionProcessLockFile(lockPath);
+  ownedSessionProcessLocks.delete(sessionId);
+  logger.info({ sessionId }, 'session process lock released');
+}
+
+function getMessageRetryCache(sessionId) {
+  let cache = messageRetryCaches.get(sessionId);
+  if (!cache) {
+    cache = new NodeCache({ stdTTL: 3600, useClones: false });
+    messageRetryCaches.set(sessionId, cache);
+  }
+  return cache;
+}
+
+function clearMessageRetryCache(sessionId) {
+  const cache = messageRetryCaches.get(sessionId);
+  if (!cache) return;
+  cache.flushAll();
+  messageRetryCaches.delete(sessionId);
+}
+
+function cancelSessionReconnect(sessionId) {
+  const reconnectTimer = reconnectTimers.get(sessionId);
+  if (!reconnectTimer) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimers.delete(sessionId);
 }
 
 async function removeSessionFiles(sessionId, logger) {
@@ -35,23 +135,47 @@ async function removeSessionFiles(sessionId, logger) {
     await fs.rm(sessionPath, { recursive: true, force: true });
   } catch (error) {
     logger.warn({ err: error, sessionId }, 'could not remove session files');
+    throw error;
   }
 }
 
-export async function cleanupSession(sessionId, deleteFiles = false, logger) {
+async function logoutSession(sessionId, logger) {
   const existing = sessions.get(sessionId);
-  if (existing) {
-    try {
-      await existing.sock.logout();
-    } catch (error) {
-      logger.warn({ err: error, sessionId }, 'logout failed during cleanup');
-    }
-    sessions.delete(sessionId);
+  if (!existing) return;
+  existing.stopRequested = true;
+  sessions.delete(sessionId);
+  try {
+    await existing.sock.logout();
+  } catch (error) {
+    logger.warn({ err: error, sessionId }, 'logout failed during deletion');
   }
+}
 
-  if (deleteFiles) {
-    await removeSessionFiles(sessionId, logger);
+async function performSessionDeletion(sessionId, logger) {
+  cancelSessionReconnect(sessionId);
+  const pendingSession = sessionLocks.get(sessionId);
+  if (pendingSession) {
+    try {
+      await pendingSession;
+    } catch (error) {
+      logger.warn({ err: error, sessionId }, 'pending session failed before deletion');
+    }
   }
+  await acquireSessionProcessLock(sessionId, logger);
+  await logoutSession(sessionId, logger);
+  await removeSessionFiles(sessionId, logger);
+  ownedSessionProcessLocks.delete(sessionId);
+  clearMessageRetryCache(sessionId);
+}
+
+export async function deleteStoredSession(sessionId, logger) {
+  const pendingDeletion = sessionDeletionLocks.get(sessionId);
+  if (pendingDeletion) return pendingDeletion;
+  const deletion = performSessionDeletion(sessionId, logger).finally(() => {
+    sessionDeletionLocks.delete(sessionId);
+  });
+  sessionDeletionLocks.set(sessionId, deletion);
+  return deletion;
 }
 
 async function loadSessionConfig(authPath, logger) {
@@ -113,14 +237,19 @@ export async function createSession(sessionId, logger) {
   const sessionConfig = await loadSessionConfig(authPath, logger);
   const { version } = await getLatestVersionSafe(logger);
   const messageStore = new Map();
-  const baileysLogger = logger.child({ component: 'baileys' }, { level: 'warn' });
+  const baileysLogger = logger.child({ component: 'baileys', sessionId }, { level: 'warn' });
 
   const sock = makeWASocket({
     version,
     logger: baileysLogger,
+    defaultQueryTimeoutMs: config.WHATSAPP_QUERY_TIMEOUT_MS,
     printQRInTerminal: false,
     browser: ['Windows', 'Chrome', '10.0'],
-    auth: state,
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, baileysLogger)
+    },
+    msgRetryCounterCache: getMessageRetryCache(sessionId),
     getMessage: async (key) => getMessageFromStore(messageStore, key)
   });
 
@@ -137,7 +266,8 @@ export async function createSession(sessionId, logger) {
     messageStore,
     identity: null,
     polls: new Map(),
-    pollsById: new Map()
+    pollsById: new Map(),
+    stopRequested: false
   };
 
   sessions.set(sessionId, session);
@@ -167,19 +297,20 @@ export async function createSession(sessionId, logger) {
     }
 
     if (connection === 'close') {
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      const isCurrentSession = sessions.get(sessionId) === session;
+      const shouldReconnect =
+        isCurrentSession &&
+        !session.stopRequested &&
+        !isShuttingDown &&
+        statusCode !== DisconnectReason.loggedOut;
       session.status = 'closed';
       session.identity = null;
-      logger.warn({ sessionId, statusCode }, 'whatsapp disconnected');
+      logger.warn({ sessionId, statusCode, shouldReconnect }, 'whatsapp disconnected');
 
       if (shouldReconnect) {
         sessions.delete(sessionId);
-        setTimeout(() => {
-          getOrCreateSession(sessionId, logger).catch((error) => {
-            logger.error({ err: error, sessionId }, 'reconnect failed');
-          });
-        }, 1000);
-      } else {
+        scheduleSessionReconnect(sessionId, config.SESSION_RECONNECT_DELAY_MS, logger);
+      } else if (isCurrentSession && statusCode !== DisconnectReason.loggedOut) {
         sessions.delete(sessionId);
       }
     }
@@ -375,12 +506,47 @@ export async function createSession(sessionId, logger) {
   return session;
 }
 
+async function createLockedSession(sessionId, logger) {
+  await acquireSessionProcessLock(sessionId, logger);
+  try {
+    return await createSession(sessionId, logger);
+  } catch (error) {
+    await releaseSessionProcessLock(sessionId, logger);
+    throw error;
+  }
+}
+
+async function reconnectSession(sessionId, logger) {
+  if (isShuttingDown || sessionDeletionLocks.has(sessionId)) return;
+  try {
+    await getOrCreateSession(sessionId, logger);
+  } catch (error) {
+    if (error?.statusCode === 409) {
+      scheduleSessionReconnect(sessionId, config.SESSION_LOCK_RETRY_DELAY_MS, logger);
+      return;
+    }
+    logger.error({ err: error, sessionId }, 'reconnect failed');
+  }
+}
+
+function scheduleSessionReconnect(sessionId, delayMs, logger) {
+  cancelSessionReconnect(sessionId);
+  const reconnectTimer = setTimeout(() => {
+    reconnectTimers.delete(sessionId);
+    reconnectSession(sessionId, logger);
+  }, delayMs);
+  reconnectTimer.unref?.();
+  reconnectTimers.set(sessionId, reconnectTimer);
+}
+
 export async function getOrCreateSession(sessionId, logger) {
+  const pendingDeletion = sessionDeletionLocks.get(sessionId);
+  if (pendingDeletion) await pendingDeletion;
   const existing = sessions.get(sessionId);
   if (existing) return existing;
   const pending = sessionLocks.get(sessionId);
   if (pending) return pending;
-  const promise = createSession(sessionId, logger).finally(() => {
+  const promise = createLockedSession(sessionId, logger).finally(() => {
     sessionLocks.delete(sessionId);
   });
   sessionLocks.set(sessionId, promise);
@@ -423,5 +589,62 @@ export async function restoreSessions(logger) {
   } catch (error) {
     logger.warn({ err: error }, 'could not scan session directory');
   }
+}
+
+function closeSessionAfterLockLoss(sessionId, error, logger) {
+  ownedSessionProcessLocks.delete(sessionId);
+  const session = sessions.get(sessionId);
+  if (!session || session.stopRequested || isShuttingDown) return;
+  session.stopRequested = true;
+  sessions.delete(sessionId);
+  session.sock.end(error);
+  logger.error({ err: error, sessionId }, 'session auth lock disappeared; connection closed');
+}
+
+async function refreshSessionProcessLock(sessionId, lockPath, now, logger) {
+  try {
+    await fs.utimes(lockPath, now, now);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      closeSessionAfterLockLoss(sessionId, error, logger);
+      return;
+    }
+    logger.error({ err: error, sessionId, lockPath }, 'session process lock heartbeat failed');
+  }
+}
+
+async function refreshSessionProcessLocks(logger) {
+  const now = new Date();
+  for (const [sessionId, lockPath] of ownedSessionProcessLocks) {
+    await refreshSessionProcessLock(sessionId, lockPath, now, logger);
+  }
+}
+
+export function startSessionLockHeartbeat(logger) {
+  const heartbeat = setInterval(() => {
+    refreshSessionProcessLocks(logger).catch((error) => {
+      logger.error({ err: error }, 'could not refresh session process locks');
+    });
+  }, config.SESSION_PROCESS_LOCK_HEARTBEAT_MS);
+  heartbeat.unref();
+}
+
+export async function shutdownSessions(signal, logger) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  for (const timer of reconnectTimers.values()) clearTimeout(timer);
+  reconnectTimers.clear();
+  await Promise.allSettled(sessionLocks.values());
+  for (const [sessionId, session] of sessions) {
+    session.stopRequested = true;
+    session.sock.end(new Error(`Server shutdown: ${signal}`));
+    logger.info({ sessionId }, 'session connection closed for shutdown');
+  }
+  sessions.clear();
+  await Promise.all(
+    Array.from(ownedSessionProcessLocks.keys()).map((sessionId) =>
+      releaseSessionProcessLock(sessionId, logger)
+    )
+  );
 }
 

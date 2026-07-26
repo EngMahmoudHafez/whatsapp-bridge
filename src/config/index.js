@@ -5,21 +5,23 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function requiredEnvironmentVariable(name) {
-  const configuredValue = process.env[name]?.trim();
-  if (!configuredValue) {
-    throw new Error(`${name} must be set in the environment.`);
-  }
-  return configuredValue;
+function optionalEnvironmentVariable(name) {
+  return process.env[name]?.trim() || null;
 }
 
-function dashboardPassword() {
-  const password = requiredEnvironmentVariable('AUTH_PASSWORD');
-  if (password.length < 12 || password === 'replace-with-a-long-random-password') {
+function dashboardPassword(apiKey) {
+  const configuredPassword = optionalEnvironmentVariable('AUTH_PASSWORD');
+  if (
+    configuredPassword &&
+    (configuredPassword.length < 12 ||
+      configuredPassword === 'replace-with-a-long-random-password')
+  ) {
     throw new Error('AUTH_PASSWORD must be changed to a value of at least 12 characters.');
   }
-  return password;
+  return configuredPassword || apiKey;
 }
+
+const apiKey = optionalEnvironmentVariable('API_KEY');
 
 export const config = {
   PORT: Number(process.env.PORT || 3000),
@@ -33,8 +35,22 @@ export const config = {
   IDEMPOTENCY_MAX_KEYS: Number(process.env.IDEMPOTENCY_MAX_KEYS || 20000),
   MESSAGE_STORE_TTL_MS: Number(process.env.MESSAGE_STORE_TTL_MS || 3600000),
   MESSAGE_STORE_MAX: Number(process.env.MESSAGE_STORE_MAX || 5000),
+  API_KEY: apiKey,
+  CORS_ORIGINS: (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3001')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+  MAX_BULK_SIZE: Number(process.env.MAX_BULK_SIZE || 100),
+  WEBHOOK_TIMEOUT_MS: Number(process.env.WEBHOOK_TIMEOUT_MS || 10000),
+  WEBHOOK_RETRIES: Number(process.env.WEBHOOK_RETRIES || 3),
+  WHATSAPP_QUERY_TIMEOUT_MS: Number(process.env.WHATSAPP_QUERY_TIMEOUT_MS || 120000),
+  SESSION_PROCESS_LOCK_FILE: '.bridge-session.lock',
+  SESSION_PROCESS_LOCK_STALE_MS: 120000,
+  SESSION_PROCESS_LOCK_HEARTBEAT_MS: 30000,
+  SESSION_RECONNECT_DELAY_MS: 1000,
+  SESSION_LOCK_RETRY_DELAY_MS: 5000,
   AUTH_USERNAME: process.env.AUTH_USERNAME || 'admin',
-  AUTH_PASSWORD: dashboardPassword(),
+  AUTH_PASSWORD: dashboardPassword(apiKey),
   AUTH_COOKIE_NAME: 'sessionId',
   AUTH_SESSION_TTL_MS: 24 * 60 * 60 * 1000,
   COOKIE_SECURE: process.env.NODE_ENV === 'production'

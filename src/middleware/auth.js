@@ -27,6 +27,7 @@ export function deleteSession(sessionId) {
 }
 
 export function authenticate(username, password) {
+  if (!config.AUTH_PASSWORD) return false;
   const suppliedCredentials = Buffer.from(`${username}\0${password}`);
   const expectedCredentials = Buffer.from(
     `${config.AUTH_USERNAME}\0${config.AUTH_PASSWORD}`
@@ -36,6 +37,11 @@ export function authenticate(username, password) {
 }
 
 export function authMiddleware(req, res, next) {
+  if (!config.AUTH_PASSWORD) {
+    req.user = { userId: 'anonymous' };
+    next();
+    return;
+  }
   const sessionId = req.cookies?.[config.AUTH_COOKIE_NAME];
   const dashboardSession = sessionId ? getSession(sessionId) : null;
   if (!dashboardSession) return rejectUnauthorizedRequest(req, res);

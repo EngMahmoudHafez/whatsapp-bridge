@@ -17,14 +17,17 @@ router.get('/sessions', authMiddleware, sessionController.listSessions);
 router.get('/sessions/:id', authMiddleware, sessionController.getSession);
 router.post('/sessions/:id/connect', authMiddleware, sessionController.connectSession);
 router.get('/sessions/:id/qr', authMiddleware, sessionController.getSessionQr);
+router.post('/sessions/:id/pair', authMiddleware, sessionController.pairSession);
 router.delete('/sessions/:id', authMiddleware, sessionController.deleteSession);
 router.get('/logs', authMiddleware, logController.listLogs);
 
 // Message routes (require auth)
 router.post('/sessions/:id/send', authMiddleware, messageController.sendMessage);
+router.post('/sessions/:id/send-image', authMiddleware, messageController.sendImage);
 router.post('/sessions/:id/send-poll', authMiddleware, messageController.sendPoll);
 router.post('/sessions/:id/send-buttons', authMiddleware, messageController.sendButtons);
 router.post('/sessions/:id/send-interactive', authMiddleware, messageController.sendInteractive);
+router.post('/sessions/:id/send-bulk', authMiddleware, messageController.sendBulk);
 
 export default router;
 

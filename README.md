@@ -8,13 +8,14 @@ maps to one WhatsApp login and forwards events to a webhook you control.
 ```bash
 yarn install
 cp .env.example .env
-# Set AUTH_PASSWORD in .env before starting the service.
+# Set API_KEY (and optionally AUTH_PASSWORD) before starting the service.
 yarn start
 ```
 
 Open `http://localhost:3000/` to use the dashboard. The dashboard and all
-management API routes require the username and password configured through
-`AUTH_USERNAME` and `AUTH_PASSWORD`.
+management API routes use the dashboard login configured through `AUTH_USERNAME`
+and `AUTH_PASSWORD`. If `AUTH_PASSWORD` is omitted, `API_KEY` is accepted as the
+dashboard password. If both are omitted, local dashboard authentication is disabled.
 
 Application logs are written to stdout and to `LOG_FILE` (defaults to
 `./logs/app.log`). Authenticated users can also inspect the latest entries from
@@ -22,31 +23,42 @@ the **سجل المشاكل** tab in the dashboard.
 
 ## API
 
-- `POST /api/sessions/:id/connect`
-- `POST /api/sessions/:id/send`
-- `POST /api/sessions/:id/send-poll`
-- `POST /api/sessions/:id/send-buttons`
-- `POST /api/sessions/:id/send-interactive`
-- `GET /api/sessions`
-- `GET /api/sessions/:id`
-- `DELETE /api/sessions/:id`
-- `GET /api/logs`
+The Laravel-compatible API keeps the same unprefixed URLs as the deployed bridge:
+
+- `POST /sessions/:id/connect`
+- `POST /sessions/:id/pair`
+- `POST /sessions/:id/send`
+- `POST /sessions/:id/send-image`
+- `POST /sessions/:id/send-poll`
+- `POST /sessions/:id/send-buttons`
+- `POST /sessions/:id/send-interactive`
+- `POST /sessions/:id/send-bulk`
+- `GET /sessions`
+- `GET /sessions/:id`
+- `GET /sessions/:id/qr`
+- `DELETE /sessions/:id`
 - `GET /health`
+
+When `API_KEY` is configured, send it as `X-API-Key: <key>` or
+`Authorization: Bearer <key>`. The dashboard's existing `/api/...` routes remain
+available for backward compatibility with the current UI.
 
 ### Connect (QR or Pair)
 
-`webhookUrl` is required on connect. The service stores it with the session and
-uses it for all future events. Use `reset: true` to wipe any saved auth state
-and start fresh.
+`webhookUrl` is optional, matching the deployed bridge. When provided, the
+service stores it with the session and uses it for future events. Use
+`reset: true` to wipe saved auth state and start fresh.
 
 ```bash
 curl -X POST http://localhost:3000/sessions/demo/connect \
+  -H "X-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"mode":"qr","waitMs":15000,"webhookUrl":"https://your-laravel-app.test/webhooks/whatsapp","webhookSecret":"optional-secret","reset":true}'
 ```
 
 ```bash
 curl -X POST http://localhost:3000/sessions/demo/connect \
+  -H "X-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"mode":"pair","phoneNumber":"201234567890","webhookUrl":"https://your-laravel-app.test/webhooks/whatsapp","webhookSecret":"optional-secret","reset":true}'
 ```
@@ -55,6 +67,7 @@ curl -X POST http://localhost:3000/sessions/demo/connect \
 
 ```bash
 curl -X POST http://localhost:3000/sessions/demo/send \
+  -H "X-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"to":"201234567890","message":"Hello from Laravel"}'
 ```
@@ -87,8 +100,9 @@ curl -X POST http://localhost:3000/sessions/demo/send-interactive \
 
 ## Webhook
 
-Each session must provide a `webhookUrl` (and optional `webhookSecret`) on the
-connect request. If `webhookUrl` is missing, the request fails.
+Each session may provide a `webhookUrl` and optional `webhookSecret` on the
+connect request. Sessions without a webhook still connect, but incoming events
+are not forwarded.
 
 The server adds an `eventId` to each webhook payload and sends the same value in
 the `x-event-id` header. A short in-memory idempotency cache suppresses duplicate

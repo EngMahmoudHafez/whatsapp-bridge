@@ -54,8 +54,16 @@ export function normalizeJid(input) {
   if (typeof input !== 'string' || !input.trim()) return null;
   const trimmed = input.trim();
   if (trimmed.includes('@')) return trimmed;
-  const digits = trimmed.replace(/\D/g, '');
+  let digits = trimmed.replace(/\D/g, '');
   if (!digits) return null;
+
+  if (digits.startsWith('0')) {
+    digits = `20${digits.slice(1)}`;
+  } else if (digits.startsWith('1') && digits.length === 10) {
+    digits = `20${digits}`;
+  }
+
+  if (digits.length < 7) return null;
   return `${digits}@s.whatsapp.net`;
 }
 
